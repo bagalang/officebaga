@@ -83,3 +83,7 @@ officebaga/
 ├── ir/ opc/ core/ docx/ xlsx/ odf/ convert/
 └── fixtures/min.doc
 ```
+
+## License
+
+[MIT](LICENSE) — Copyright (c) 2026 Dim Gigov.
