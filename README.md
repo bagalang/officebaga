@@ -11,6 +11,25 @@
 | **Plan** | [plan](../../docs/superpowers/plans/2026-08-06-officebaga.md) · [gaps](gaps.md) |
 | **Tests** | `tests/office_test.baga` |
 
+This repository is the package. The compiler, `std`, `zipbaga`,
+`xmlbaga`, `bufbaga`, and `mdbaga` stay in the baga language monorepo.
+Check this tree out as `app-product/officebaga` there (git submodule)
+so path deps and `-I app-product` keep working.
+
+## Checkout
+
+Inside a baga language clone:
+
+```bash
+git submodule update --init --recursive
+# or, first time from a fresh baga tree without the submodule recorded:
+git clone git@github.com:bagalang/officebaga.git app-product/officebaga
+```
+
+`sandak.toml` keeps path deps so the shared packages stay in baga.
+`reportbaga` still depends on `../officebaga`. `tests/office_test.baga`
+stays in baga.
+
 ## Formats
 
 | Format | Extract | Create | Edit | Notes |
