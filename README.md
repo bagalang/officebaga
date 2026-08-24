@@ -5,7 +5,7 @@
 
 | | |
 |--|--|
-| **sandak** | `officebaga` **0.2.0** |
+| **sandak** | `officebaga` **0.3.0** |
 | **Deps** | `zipbaga`, `xmlbaga`, `bufbaga`, `mdbaga`, `std` |
 | **Design** | [spec](../../docs/superpowers/specs/2026-08-06-officebaga-design.md) |
 | **Plan** | [plan](../../docs/superpowers/plans/2026-08-06-officebaga.md) · [gaps](gaps.md) |

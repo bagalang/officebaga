@@ -3,9 +3,15 @@
 import "std/os/os.baga"
 
 fn office_read_bytes(path: str) -> bytes !IO {
+    if path == "" || file_exists(path)? == 0 {
+        return bytes_new(0)
+    }
     return read_file_bytes(path)?
 }
 
 fn office_write_bytes(path: str, data: bytes) -> i64 !IO {
+    if path == "" {
+        return -1
+    }
     return write_file_bytes(path, data)?
 }

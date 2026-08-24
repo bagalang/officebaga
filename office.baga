@@ -19,6 +19,7 @@ import "edit/edit.baga"
 import "ole/cfb.baga"
 import "zipbaga/archive.baga"
 import "std/str/str.baga"
+import "std/os/os.baga"
 
 struct Document {
     pkg: OpcPackage,
@@ -35,7 +36,7 @@ struct OfficeResult {
 }
 
 fn office_version() -> str {
-    return "0.2.0"
+    return "0.3.0"
 }
 
 fn office_empty_doc() -> Document {
@@ -96,8 +97,11 @@ fn office_open_bytes(data: bytes) -> OfficeResult {
         return office_fail(pkg.err)
     }
     let fmt = office_detect_pkg(pkg)
+    if fmt == OFFICE_PPTX() {
+        return office_fail("office: presentations not supported (pptx/odp)")
+    }
     if fmt == OFFICE_UNKNOWN() {
-        return office_fail("office: unsupported or presentation format (pptx/odp not supported)")
+        return office_fail("office: unsupported format")
     }
     return office_ok(Document {
         pkg: pkg,
@@ -109,9 +113,15 @@ fn office_open_bytes(data: bytes) -> OfficeResult {
 }
 
 fn office_open(path: str) -> OfficeResult !IO {
+    if path == "" {
+        return office_fail("office: empty path")
+    }
+    if file_exists(path)? == 0 {
+        return office_fail("office: file not found")
+    }
     let data = office_read_bytes(path)?
     if bytes_len(data) == 0 {
-        return office_fail(concat("office: empty or unreadable file: ", path))
+        return office_fail("office: empty file")
     }
     let r = office_open_bytes(data)
     if r.ok == 0 {

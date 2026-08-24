@@ -11,6 +11,7 @@ fn OFFICE_ODT() -> i64 { return 3 }
 fn OFFICE_ODS() -> i64 { return 4 }
 fn OFFICE_DOC() -> i64 { return 5 }   // legacy OLE Word
 fn OFFICE_XLS() -> i64 { return 6 }   // legacy OLE Excel
+fn OFFICE_PPTX() -> i64 { return 7 }  // rejected presentations
 
 fn office_format_name(fmt: i64) -> str {
     if fmt == 1 { return "docx" }
@@ -35,7 +36,7 @@ fn office_detect_pkg(pkg: OpcPackage) -> i64 {
     }
     // Presentations deliberately ignored (pptx / odp)
     if opc_has(pkg, "ppt/presentation.xml") {
-        return OFFICE_UNKNOWN()
+        return OFFICE_PPTX()
     }
     // ODF via mimetype part (must be first entry, stored) or content.xml heuristics
     if opc_has(pkg, "mimetype") {
@@ -67,6 +68,7 @@ fn office_detect_path_hint(path: str) -> i64 {
         let ext = substr(path, n - 5, n)
         if ext == ".docx" || ext == ".DOCX" { return OFFICE_DOCX() }
         if ext == ".xlsx" || ext == ".XLSX" { return OFFICE_XLSX() }
+        if ext == ".pptx" || ext == ".PPTX" { return OFFICE_PPTX() }
     }
     if n >= 4 {
         let ext4 = substr(path, n - 4, n)

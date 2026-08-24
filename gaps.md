@@ -1,5 +1,10 @@
 # officebaga — gaps
 
+## Closed (0.3.0)
+
+`office_open` fail-loud on missing path (`file_exists`). PPTX is
+`OFFICE_PPTX` and rejected with a dedicated error. Path hint `.pptx`.
+
 ## Closed (0.2.0)
 
 | Item |
