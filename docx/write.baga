@@ -45,6 +45,150 @@ fn docx_doc_rels() -> str {
     return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"></Relationships>"
 }
 
+fn docx_tc(text: str, header: i64) -> str {
+    let mut b = buf_new()
+    b = buf_push(b, "<w:tc><w:tcPr><w:tcW w:w=\"0\" w:type=\"auto\"/></w:tcPr><w:p>")
+    if header == 1 {
+        b = buf_push(b, "<w:pPr><w:jc w:val=\"left\"/></w:pPr>")
+    }
+    b = buf_push(b, "<w:r>")
+    if header == 1 {
+        b = buf_push(b, "<w:rPr><w:b/></w:rPr>")
+    }
+    b = buf_push(b, "<w:t xml:space=\"preserve\">")
+    b = buf_push(b, docx_esc(text))
+    b = buf_push(b, "</w:t></w:r></w:p></w:tc>")
+    return buf_str(b)
+}
+
+fn docx_table_xml(rows: Vec<str>) -> str {
+    let mut b = buf_new()
+    b = buf_push(b, "<w:tbl><w:tblPr><w:tblW w:w=\"5000\" w:type=\"pct\"/><w:tblBorders>")
+    b = buf_push(b, "<w:top w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "<w:left w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "<w:bottom w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "<w:right w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "<w:insideH w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "<w:insideV w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>")
+    b = buf_push(b, "</w:tblBorders></w:tblPr>")
+    let mut r: i64 = 0
+    while r < vec_len(rows) {
+        let cells = str_split(vec_get(rows, r), "\t")
+        let mut header: i64 = 0
+        if r == 0 {
+            header = 1
+        }
+        b = buf_push(b, "<w:tr>")
+        let mut c: i64 = 0
+        while c < vec_len(cells) {
+            b = buf_push(b, docx_tc(vec_get(cells, c), header))
+            c = c + 1
+        }
+        b = buf_push(b, "</w:tr>")
+        r = r + 1
+    }
+    b = buf_push(b, "</w:tbl>")
+    return buf_str(b)
+}
+
+fn docx_report_body_xml(title: str, meta: str, rows: Vec<str>) -> str {
+    let mut b = buf_new()
+    b = buf_push(b, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
+    b = buf_push(b, "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>")
+    if title != "" {
+        b = buf_push(b, "<w:p><w:r><w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr><w:t>")
+        b = buf_push(b, docx_esc(title))
+        b = buf_push(b, "</w:t></w:r></w:p>")
+    }
+    if meta != "" {
+        b = buf_push(b, "<w:p><w:r><w:t xml:space=\"preserve\">")
+        b = buf_push(b, docx_esc(meta))
+        b = buf_push(b, "</w:t></w:r></w:p>")
+    }
+    if vec_len(rows) > 0 {
+        b = buf_push(b, docx_table_xml(rows))
+    }
+    b = buf_push(b, "</w:body></w:document>")
+    return buf_str(b)
+}
+
+fn docx_para_xml(text: str, heading: i64) -> str {
+    let mut b = buf_new()
+    b = buf_push(b, "<w:p><w:r>")
+    if heading == 1 {
+        b = buf_push(b, "<w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr>")
+    }
+    b = buf_push(b, "<w:t xml:space=\"preserve\">")
+    b = buf_push(b, docx_esc(text))
+    b = buf_push(b, "</w:t></w:r></w:p>")
+    return buf_str(b)
+}
+
+fn docx_doc_body_xml(kinds: Vec<i64>, texts: Vec<str>) -> str {
+    let mut b = buf_new()
+    b = buf_push(b, "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
+    b = buf_push(b, "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>")
+    let mut i: i64 = 0
+    while i < vec_len(kinds) {
+        let kind = vec_get(kinds, i)
+        let text = vec_get(texts, i)
+        if kind == 1 {
+            b = buf_push(b, docx_para_xml(text, 1))
+        }
+        if kind == 2 {
+            b = buf_push(b, docx_para_xml(text, 0))
+        }
+        if kind == 3 {
+            let raw = str_split(text, "\n")
+            let rows: Vec<str> = vec_new()
+            let mut r: i64 = 0
+            while r < vec_len(raw) {
+                if r == vec_len(raw) - 1 && vec_get(raw, r) == "" {
+                    r = r + 1
+                } else {
+                    vec_push(rows, vec_get(raw, r))
+                    r = r + 1
+                }
+            }
+            if vec_len(rows) > 0 {
+                b = buf_push(b, docx_table_xml(rows))
+                b = buf_push(b, "<w:p/>")
+            }
+        }
+        i = i + 1
+    }
+    b = buf_push(b, "</w:body></w:document>")
+    return buf_str(b)
+}
+
+fn docx_doc_bytes(kinds: Vec<i64>, texts: Vec<str>) -> bytes {
+    let names = vec_new()
+    let parts = vec_new()
+    vec_push(names, "[Content_Types].xml")
+    vec_push(parts, bytes_of_str(docx_content_types()))
+    vec_push(names, "_rels/.rels")
+    vec_push(parts, bytes_of_str(docx_root_rels()))
+    vec_push(names, "word/document.xml")
+    vec_push(parts, bytes_of_str(docx_doc_body_xml(kinds, texts)))
+    vec_push(names, "word/_rels/document.xml.rels")
+    vec_push(parts, bytes_of_str(docx_doc_rels()))
+    return zip_write_deflate(names, parts)
+}
+
+fn docx_report_bytes(title: str, meta: str, rows: Vec<str>) -> bytes {
+    let names = vec_new()
+    let parts = vec_new()
+    vec_push(names, "[Content_Types].xml")
+    vec_push(parts, bytes_of_str(docx_content_types()))
+    vec_push(names, "_rels/.rels")
+    vec_push(parts, bytes_of_str(docx_root_rels()))
+    vec_push(names, "word/document.xml")
+    vec_push(parts, bytes_of_str(docx_report_body_xml(title, meta, rows)))
+    vec_push(names, "word/_rels/document.xml.rels")
+    vec_push(parts, bytes_of_str(docx_doc_rels()))
+    return zip_write_deflate(names, parts)
+}
+
 // Returns ZIP bytes of a minimal .docx
 fn docx_create_bytes(title: str, body: str) -> bytes {
     let names = vec_new()
