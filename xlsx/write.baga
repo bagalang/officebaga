@@ -4,6 +4,7 @@
 import "zipbaga/archive.baga"
 import "xmlbaga/xml.baga"
 import "bufbaga/buf.baga"
+import "../core/numcell.baga"
 import "std/str/str.baga"
 
 fn xlsx_esc(s: str) -> str {
@@ -105,11 +106,18 @@ fn xlsx_sheet_xml_opts(rows: Vec<str>, freeze_header: i64) -> str {
         let mut c: i64 = 0
         while c < vec_len(cells) {
             let ref = concat(xlsx_col_name(c), int_to_str(r + 1))
+            let val = vec_get(cells, c)
             b = buf_push(b, "<c r=\"")
             b = buf_push(b, ref)
-            b = buf_push(b, "\" t=\"inlineStr\"><is><t>")
-            b = buf_push(b, xlsx_esc(vec_get(cells, c)))
-            b = buf_push(b, "</t></is></c>")
+            if office_cell_is_num(val) == 1 {
+                b = buf_push(b, "\" t=\"n\"><v>")
+                b = buf_push(b, office_cell_xml_value(val))
+                b = buf_push(b, "</v></c>")
+            } else {
+                b = buf_push(b, "\" t=\"inlineStr\"><is><t>")
+                b = buf_push(b, xlsx_esc(val))
+                b = buf_push(b, "</t></is></c>")
+            }
             c = c + 1
         }
         b = buf_push(b, "</row>")

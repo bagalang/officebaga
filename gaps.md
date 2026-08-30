@@ -1,5 +1,11 @@
 # officebaga — gaps
 
+## Closed (2026-08-31)
+
+XLSX/ODS create: plain numbers (dot or comma decimal, no leading zeros)
+are numeric cells, not strings. XML value uses `.`. ODS visible text uses
+`,` (BG). Document numbers like `0000000001` stay text.
+
 ## Closed (0.3.0)
 
 `office_open` fail-loud on missing path (`file_exists`). PPTX is

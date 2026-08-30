@@ -3,6 +3,7 @@
 import "zipbaga/archive.baga"
 import "xmlbaga/xml.baga"
 import "bufbaga/buf.baga"
+import "../core/numcell.baga"
 import "std/str/str.baga"
 
 fn odf_esc(s: str) -> str {
@@ -406,9 +407,18 @@ fn ods_content_xml(tsv: str) -> str {
         b = buf_push(b, "<table:table-row>")
         let mut c: i64 = 0
         while c < vec_len(cells) {
-            b = buf_push(b, "<table:table-cell office:value-type=\"string\"><text:p>")
-            b = buf_push(b, odf_esc(vec_get(cells, c)))
-            b = buf_push(b, "</text:p></table:table-cell>")
+            let val = vec_get(cells, c)
+            if office_cell_is_num(val) == 1 {
+                b = buf_push(b, "<table:table-cell office:value-type=\"float\" office:value=\"")
+                b = buf_push(b, office_cell_xml_value(val))
+                b = buf_push(b, "\"><text:p>")
+                b = buf_push(b, odf_esc(office_cell_bg_text(office_cell_xml_value(val))))
+                b = buf_push(b, "</text:p></table:table-cell>")
+            } else {
+                b = buf_push(b, "<table:table-cell office:value-type=\"string\"><text:p>")
+                b = buf_push(b, odf_esc(val))
+                b = buf_push(b, "</text:p></table:table-cell>")
+            }
             c = c + 1
         }
         b = buf_push(b, "</table:table-row>")

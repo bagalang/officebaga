@@ -35,9 +35,9 @@ stays in baga.
 | Format | Extract | Create | Edit | Notes |
 |--------|---------|--------|------|-------|
 | DOCX | ✅ | ✅ + md→docx | ✅ replace_text | ZIP deflate |
-| XLSX | ✅ | ✅ | ✅ (sharedStrings/sheet XML) | |
+| XLSX | ✅ | ✅ | ✅ (sharedStrings/sheet XML) | числа като `t="n"`, не текст |
 | ODT | ✅ | ✅ | ✅ content.xml | mimetype stored |
-| ODS | ✅ | ✅ | ✅ | |
+| ODS | ✅ | ✅ | ✅ | числа: `float` + текст със запетая |
 | DOC | ⚠ ASCII probe | — | — | OLE2/CFB |
 | XLS | ⚠ ASCII probe | — | — | OLE2/CFB |
 | PPTX | ❌ | — | — | rejected |
@@ -58,6 +58,7 @@ office_save(e.doc, "out.docx")?
 // create
 office_docx_bytes("Title", "Body")
 office_md_to_docx_bytes("# Hi\n\nPara\n")
+// xlsx/ods: "1056.9" / "1056,9" → numeric cell; "0000000001" stays text
 
 // legacy OLE
 let streams = office_ole_streams(doc)  // if .doc/.xls
