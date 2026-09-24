@@ -193,6 +193,20 @@ fn office_to_markdown(d: Document) -> str {
     return ir_to_markdown(office_to_ir(d))
 }
 
+// Editor-facing markdown: DOCX keeps headings and inline bold/italic
+// (docx_markdown); everything else falls back to the plain subset.
+fn office_to_markdown_rich(d: Document) -> str {
+    if d.is_ole == 0 && d.format == OFFICE_DOCX() {
+        return docx_markdown(d.pkg)
+    }
+    return office_to_markdown(d)
+}
+
+// Markdown → plain paragraphs (for ODT create, which has no inline runs).
+fn office_md_to_plain(md: str) -> str {
+    return md_to_plain_text(md)
+}
+
 // --- create ---
 
 fn office_docx_bytes(title: str, body: str) -> bytes {

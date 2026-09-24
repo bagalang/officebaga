@@ -1,6 +1,6 @@
 // convert/from_md.baga — Markdown → DOCX (line heuristics via mdbaga).
-// Headings, paragraphs, ul/ol markers, hr as blank para. Inline markers
-// are left as literal text (honest subset; no full inline AST → runs).
+// Headings, paragraphs, ul/ol markers, hr as blank para. Inline **bold**,
+// *italic* and ***both*** become real run properties.
 
 import "mdbaga/md.baga"
 import "zipbaga/archive.baga"
@@ -13,11 +13,143 @@ fn md_docx_esc(s: str) -> str {
     return xml_escape_text(s)
 }
 
+fn md_docx_run_xml(text: str, b: i64, i: i64) -> str {
+    if text == "" {
+        return ""
+    }
+    let mut x = buf_new()
+    x = buf_push(x, "<w:r>")
+    if b == 1 || i == 1 {
+        x = buf_push(x, "<w:rPr>")
+        if b == 1 {
+            x = buf_push(x, "<w:b/>")
+        }
+        if i == 1 {
+            x = buf_push(x, "<w:i/>")
+        }
+        x = buf_push(x, "</w:rPr>")
+    }
+    x = buf_push(x, "<w:t xml:space=\"preserve\">")
+    x = buf_push(x, md_docx_esc(text))
+    x = buf_push(x, "</w:t></w:r>")
+    return buf_str(x)
+}
+
+// Index of the next run of >= need '*' chars at/after `from`; -1 if none.
+fn md_find_stars(text: str, from: i64, need: i64) -> i64 {
+    let n = len(text)
+    let mut i: i64 = from
+    while i < n {
+        if char_at(text, i) == 42 {
+            let mut k: i64 = 0
+            while i + k < n && char_at(text, i + k) == 42 {
+                k = k + 1
+            }
+            if k >= need {
+                return i
+            }
+            i = i + k
+        } else {
+            i = i + 1
+        }
+    }
+    return -1
+}
+
+// How many stars of the run at `pos` act as a marker (0 = literal).
+// Inside an open marker the run closes it without needing a further
+// closer ahead; an opener requires a matching closer later in the text.
+fn md_star_use(text: str, pos: i64, stars: i64, b: i64, i: i64) -> i64 {
+    let mut s: i64 = stars
+    if s > 3 {
+        s = 3
+    }
+    if b == 1 && i == 1 {
+        if s >= 3 {
+            return 3
+        }
+        if s == 2 {
+            return 2
+        }
+        return 1
+    }
+    if b == 1 {
+        if s >= 2 {
+            return 2
+        }
+        return 1
+    }
+    if i == 1 {
+        if s >= 2 && md_find_stars(text, pos + 2, 2) >= 0 {
+            return 2
+        }
+        return 1
+    }
+    while s >= 1 {
+        if md_find_stars(text, pos + s, s) >= 0 {
+            return s
+        }
+        s = s - 1
+    }
+    return 0
+}
+
+// Inline **bold** / *italic* / ***both*** → run sequence. Unmatched stars
+// stay literal. force_b=1 makes every run bold (headings).
+fn md_docx_runs_xml(text: str, force_b: i64) -> str {
+    let mut out = buf_new()
+    let mut cur = buf_new()
+    let mut b: i64 = force_b
+    let mut i: i64 = 0
+    let n = len(text)
+    let mut pos: i64 = 0
+    while pos < n {
+        if char_at(text, pos) == 42 {
+            let mut stars: i64 = 0
+            while pos + stars < n && char_at(text, pos + stars) == 42 {
+                stars = stars + 1
+            }
+            let use = md_star_use(text, pos, stars, b, i)
+            if use > 0 {
+                out = buf_push(out, md_docx_run_xml(buf_str(cur), b, i))
+                cur = buf_new()
+                if use == 1 {
+                    i = 1 - i
+                }
+                if use == 2 {
+                    if force_b == 0 {
+                        b = 1 - b
+                    }
+                }
+                if use == 3 {
+                    if force_b == 0 {
+                        b = 1 - b
+                    }
+                    i = 1 - i
+                }
+                pos = pos + use
+            } else {
+                let mut k: i64 = 0
+                while k < stars {
+                    cur = buf_push_chr(cur, 42)
+                    k = k + 1
+                }
+                pos = pos + stars
+            }
+        } else {
+            cur = buf_push_chr(cur, char_at(text, pos))
+            pos = pos + 1
+        }
+    }
+    out = buf_push(out, md_docx_run_xml(buf_str(cur), b, i))
+    return buf_str(out)
+}
+
 fn md_docx_para_xml(text: str) -> str {
     let mut b = buf_new()
-    b = buf_push(b, "<w:p><w:r><w:t xml:space=\"preserve\">")
-    b = buf_push(b, md_docx_esc(text))
-    b = buf_push(b, "</w:t></w:r></w:p>")
+    b = buf_push(b, "<w:p>")
+    b = buf_push(b, md_docx_runs_xml(text, 0))
+    b = buf_push(b, "</w:p>")
     return buf_str(b)
 }
 
@@ -33,16 +165,24 @@ fn md_docx_heading_xml(level: i64, text: str) -> str {
     let mut b = buf_new()
     b = buf_push(b, "<w:p><w:pPr><w:outlineLvl w:val=\"")
     b = buf_push_i64(b, lvl)
-    b = buf_push(b, "\"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space=\"preserve\">")
-    b = buf_push(b, md_docx_esc(text))
-    b = buf_push(b, "</w:t></w:r></w:p>")
+    b = buf_push(b, "\"/></w:pPr>")
+    b = buf_push(b, md_docx_runs_xml(text, 1))
+    b = buf_push(b, "</w:p>")
     return buf_str(b)
+}
+
+// ul marker: mdbaga (-, *, +) plus "• " (round-trip of our own DOCX output).
+fn md_docx_ul_marker(t: str) -> i64 {
+    if str_starts_with(t, "• ") {
+        return 2
+    }
+    return md_ul_marker(t)
 }
 
 // Strip a leading list marker; returns body text (may be empty).
 fn md_docx_list_body(line: str) -> str {
     let t = str_trim(line)
-    let um = md_ul_marker(t)
+    let um = md_docx_ul_marker(t)
     if um > 0 {
         return str_trim(substr(t, um, len(t)))
     }
@@ -69,7 +209,7 @@ fn md_to_docx_body_xml(md: str) -> str {
         let hl = md_heading_level(line)
         let fence = md_is_fence(line)
         let hr = md_is_hr(line)
-        let um = md_ul_marker(str_trim(line))
+        let um = md_docx_ul_marker(str_trim(line))
         let om = md_ol_marker(str_trim(line))
         let is_list = um > 0 || om > 0
 
@@ -143,4 +283,41 @@ fn md_to_docx_bytes(md: str) -> bytes {
     vec_push(names, "word/_rels/document.xml.rels")
     vec_push(parts, bytes_of_str(docx_doc_rels()))
     return zip_write_deflate(names, parts)
+}
+
+// Markdown → plain paragraphs (heading/list markers and inline stars
+// stripped). For writers without formatting support (ODT create).
+fn md_to_plain_text(md: str) -> str {
+    let lines = str_split(md, "\n")
+    let mut b = buf_new()
+    let mut i: i64 = 0
+    while i < vec_len(lines) {
+        let line = vec_get(lines, i)
+        let hl = md_heading_level(line)
+        if md_line_blank(line) {
+            b = buf_push(b, "\n")
+        } else {
+            if hl > 0 {
+                b = buf_push(b, md_heading_text(line, hl))
+                b = buf_push(b, "\n")
+            } else {
+                if md_is_fence(line) == false && md_is_hr(line) == false {
+                    b = buf_push(b, md_docx_list_body(line))
+                    b = buf_push(b, "\n")
+                }
+            }
+        }
+        i = i + 1
+    }
+    let raw = buf_str(b)
+    let mut out = buf_new()
+    let mut j: i64 = 0
+    while j < len(raw) {
+        let c = char_at(raw, j)
+        if c != 42 {
+            out = buf_push_chr(out, c)
+        }
+        j = j + 1
+    }
+    return buf_str(out)
 }
