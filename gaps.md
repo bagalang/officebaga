@@ -41,10 +41,13 @@ bytes). Not a delta to the original local headers.
 No FIB/piece table / BIFF parse — printable ASCII runs only. Real .doc
 layout/unicode incomplete.
 
-### O11 — mini streams in CFB
+### O11 — ~~mini streams in CFB~~ — closed 2026-10-31
 
-Streams smaller than mini cutoff that live in the mini stream may not read
-correctly yet (FAT-only path preferred).
+`cfb_read_mini`: когато size < mini_cutoff И MiniFAT присъства, данните се
+четат от mini сектори (mini_sector_size), веригувани през mini_fat, а
+контейнерът е root entry stream (regular FAT). Ако MiniFAT липсва — fall
+back към regular FAT (малки потоци в такива файлове ползват FAT).
+Тест: tests/cfb_mini_test.baga (синтетичен CFB с mini stream).
 
 ### O4 — formulas / styles / headers
 

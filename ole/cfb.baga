@@ -276,10 +276,12 @@ fn cfb_read_index(cfb: CfbFile, index: i64) -> CfbResult {
     if e.size == 0 {
         return CfbResult { ok: 1, err: "", data: bytes_new(0) }
     }
-    // Mini stream path needs root storage stream — simplified: only regular FAT if size >= cutoff
-    if e.size < cfb.mini_cutoff && e.typ == 2 {
-        // Mini stream: need Root Entry stream as container — skip with error if complex
-        // Try regular chain anyway for small streams that still use FAT
+    // O11 (closed 2026-10-31): mini stream — size < cutoff И има MiniFAT.
+    // Ако mini_fat е празен (няма MiniFAT в файла), малките потоци все пак
+    // ползват regular FAT — fall through.
+    if e.size < cfb.mini_cutoff && e.typ == 2 && cfb.mini_cutoff > 0 &&
+       vec_len(cfb.mini_fat) > 0 {
+        return cfb_read_mini(cfb, e)
     }
     let mut out = bytes_new(0)
     let mut sec = e.start
@@ -301,6 +303,59 @@ fn cfb_read_index(cfb: CfbFile, index: i64) -> CfbResult {
         }
         sec = vec_get(cfb.fat, sec)
         guard = guard + 1
+    }
+    if bytes_len(out) > e.size {
+        out = bytes_slice(out, 0, e.size)
+    }
+    return CfbResult { ok: 1, err: "", data: out }
+}
+
+// O11: чете mini stream — контейнерът е root entry stream (regular FAT),
+// mini секторите се веригуват през mini_fat, всеки mini_sector_size байта.
+fn cfb_read_mini(cfb: CfbFile, e: CfbEntry) -> CfbResult {
+    let root = cfb_dir_entry(cfb, 0)
+    if root.typ != 5 {
+        return CfbResult { ok: 0, err: "cfb: no root entry for mini stream", data: bytes_new(0) }
+    }
+    // root stream винаги е regular FAT chain
+    let mut container = bytes_new(0)
+    let mut sec = root.start
+    let mut left = root.size
+    let mut guard: i64 = 0
+    while left > 0 && sec >= 0 && sec < 4294967294 && guard < 100000 {
+        let off = cfb_sector_off(cfb.sector_size, sec)
+        let mut take = cfb.sector_size
+        if take > left { take = left }
+        if off + take > bytes_len(cfb.data) {
+            return CfbResult { ok: 0, err: "cfb: truncated root stream", data: bytes_new(0) }
+        }
+        container = bytes_concat(container, bytes_slice(cfb.data, off, off + take))
+        left = left - take
+        if sec >= vec_len(cfb.fat) { break }
+        sec = vec_get(cfb.fat, sec)
+        guard = guard + 1
+    }
+    // mini chain през mini_fat
+    let msz = cfb.mini_sector_size
+    if msz <= 0 {
+        return CfbResult { ok: 0, err: "cfb: bad mini sector size", data: bytes_new(0) }
+    }
+    let mut out = bytes_new(0)
+    let mut msec = e.start
+    let mut mleft = e.size
+    let mut mguard: i64 = 0
+    while mleft > 0 && msec >= 0 && msec < 4294967294 && mguard < 100000 {
+        let off = msec * msz
+        let mut take = msz
+        if take > mleft { take = mleft }
+        if off + take > bytes_len(container) {
+            return CfbResult { ok: 0, err: "cfb: truncated mini stream", data: bytes_new(0) }
+        }
+        out = bytes_concat(out, bytes_slice(container, off, off + take))
+        mleft = mleft - take
+        if msec >= vec_len(cfb.mini_fat) { break }
+        msec = vec_get(cfb.mini_fat, msec)
+        mguard = mguard + 1
     }
     if bytes_len(out) > e.size {
         out = bytes_slice(out, 0, e.size)
