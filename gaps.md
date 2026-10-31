@@ -28,10 +28,13 @@ are numeric cells, not strings. XML value uses `.`. ODS visible text uses
 Replaces one ZIP part and re-writes the archive (other parts preserved as
 bytes). Not a delta to the original local headers.
 
-### O8 — replace_text is raw XML substring
+### O8 — ~~replace_text is raw XML substring~~ — closed 2026-10-31 (DOCX)
 
-Must match a contiguous string inside the main part (often one `w:t` run).
-Cross-run replacements fail.
+`office_docx_replace_cross_run(xml, from, to)`: слива текста на
+последователните `<w:t>` елементи, намира `from`, записва `to` в първия
+елемент от диапазона и изпразва останалите. `office_replace_text_pkg`
+пробва първо обикновен substring, после cross-run за DOCX.
+Ограничение: губи formatting в заменения диапазон (един `<w:t>`).
 
 ### O10 — OLE text is not Word/Excel fidelity
 

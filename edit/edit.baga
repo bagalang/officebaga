@@ -57,9 +57,114 @@ fn office_replace_text_pkg(pkg: OpcPackage, fmt: i64, from: str, to: str) -> Zip
         return part
     }
     let src = str_of_bytes(part.data)
-    if str_find(src, from) < 0 {
-        return ZipPart { ok: 0, err: concat("office: text not found: ", from), data: bytes_new(0) }
+    if str_find(src, from) >= 0 {
+        let updated = str_replace(src, from, to)
+        return zip_set_entry(pkg.zip, use_path, bytes_of_str(updated), 1)
     }
-    let updated = str_replace(src, from, to)
-    return zip_set_entry(pkg.zip, use_path, bytes_of_str(updated), 1)
+    // O8: опит за cross-run замяна (DOCX <w:t> елементи)
+    if fmt == OFFICE_DOCX() {
+        let cross = office_docx_replace_cross_run(src, from, to)
+        if cross != "" {
+            return zip_set_entry(pkg.zip, use_path, bytes_of_str(cross), 1)
+        }
+    }
+    return ZipPart { ok: 0, err: concat("office: text not found: ", from), data: bytes_new(0) }
+}
+
+// O8 (closed 2026-10-31): cross-run замяна за DOCX — когато `from` е разбит
+// на няколко <w:t> елемента. Сливаме текста на последователните <w:t>,
+// намираме `from`, и записваме `to` в първия елемент от диапазона, а
+// останалите изпразваме. Връща новия XML или "" ако няма съвпадение.
+fn office_docx_replace_cross_run(xml: str, from: str, to: str) -> str {
+    if from == "" || xml == "" {
+        return ""
+    }
+    let mut starts: Vec<i64> = vec_new()
+    let mut open_ends: Vec<i64> = vec_new()
+    let mut close_starts: Vec<i64> = vec_new()
+    let mut texts: Vec<str> = vec_new()
+    let mut i: i64 = 0
+    let n = len(xml)
+    while i < n {
+        if char_at(xml, i) == 60 && i + 4 < n &&
+           char_at(xml, i + 1) == 119 && char_at(xml, i + 2) == 58 && char_at(xml, i + 3) == 116 &&
+           (char_at(xml, i + 4) == 62 || char_at(xml, i + 4) == 32) {
+            let gt = str_find_from(xml, ">", i)
+            if gt < 0 { break }
+            let close = str_find_from(xml, "</w:t>", gt)
+            if close < 0 { break }
+            vec_push(starts, i)
+            vec_push(open_ends, gt + 1)
+            vec_push(close_starts, close)
+            vec_push(texts, substr(xml, gt + 1, close))
+            i = close + 6
+        } else {
+            i = i + 1
+        }
+    }
+    let nt = vec_len(texts)
+    if nt == 0 {
+        return ""
+    }
+    let mut flat = ""
+    let mut offsets: Vec<i64> = vec_new()
+    for k in 0..nt {
+        vec_push(offsets, len(flat))
+        flat = concat(flat, vec_get_str(texts, k))
+    }
+    let pos = str_find(flat, from)
+    if pos < 0 {
+        return ""
+    }
+    let flen = len(from)
+    let match_end = pos + flen
+    let mut first_el: i64 = 0 - 1
+    let mut last_el: i64 = 0 - 1
+    for k in 0..nt {
+        let s = vec_get(offsets, k)
+        let e = s + len(vec_get_str(texts, k))
+        if s <= pos && pos < e { first_el = k }
+        if s < match_end && match_end <= e { last_el = k }
+    }
+    if first_el < 0 || last_el < 0 || first_el > last_el {
+        return ""
+    }
+    let mut out = ""
+    let mut cursor: i64 = 0
+    for k in 0..nt {
+        let p = vec_get(starts, k)
+        out = concat(out, substr(xml, cursor, p))
+        let open_end = vec_get(open_ends, k)
+        let open_tag = substr(xml, p, open_end)
+        let close_s = vec_get(close_starts, k)
+        let el_text = vec_get_str(texts, k)
+        let s = vec_get(offsets, k)
+        if k == first_el {
+            let local_start = pos - s
+            let prefix = substr(el_text, 0, local_start)
+            if k == last_el {
+                let local_end = match_end - s
+                let suffix = substr(el_text, local_end, len(el_text))
+                out = concat(out, concat(open_tag, concat(prefix, concat(to, suffix))))
+            } else {
+                out = concat(out, concat(open_tag, concat(prefix, to)))
+            }
+        } else if k > first_el && k <= last_el {
+            if k == last_el {
+                let local_end = match_end - s
+                let suffix = substr(el_text, local_end, len(el_text))
+                out = concat(out, concat(open_tag, suffix))
+            } else {
+                out = concat(out, open_tag)
+            }
+        } else {
+            out = concat(out, concat(open_tag, concat(el_text, "</w:t>")))
+            cursor = close_s + 6
+            continue
+        }
+        out = concat(out, "</w:t>")
+        cursor = close_s + 6
+    }
+    out = concat(out, substr(xml, cursor, n))
+    return out
 }
